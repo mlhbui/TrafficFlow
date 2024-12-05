@@ -1,3 +1,7 @@
+;; import the python extension
+extensions [py]
+
+
 globals
 [
   grid-x-inc               ;; the amount of patches in between two roads in the x direction
@@ -12,6 +16,8 @@ globals
   intersections ;; agentset containing the patches that are intersections
   roads         ;; agentset containing the patches that are roads
   dynamic-lights?
+
+  max-distance ;; max-possible distance between home and work, depending on grid size
 ]
 
 turtles-own
@@ -47,6 +53,14 @@ patches-own
 ;; Create num-cars of turtles if there are enough road patches for one turtle to
 ;; be created per road patch.
 to setup
+  ;; setup the connection to python
+  py:setup py:python3
+
+  ;; import necessary python libraries
+  (py:run
+    "import numpy as np"
+    "import random"
+  )
 
   clear-all
   setup-globals
@@ -79,8 +93,11 @@ to setup
     record-data
     ;; choose at random a location for the house
     set house one-of goal-candidates
-    ;; choose at random a location for work, make sure work is not located at same location as house
-    set work one-of goal-candidates with [ self != [ house ] of myself ]
+    ;; choose at random a location for work, make sure work is far enough from the house
+    set work one-of goal-candidates with [ self != [ house ] of myself
+      and distance [house] of myself > min-distance
+    ]
+    ;; set initial goal to work
     set goal work
   ]
 
@@ -97,10 +114,17 @@ to setup-globals
   set num-cars-stopped 0
   set grid-x-inc world-width / grid-size-x
   set grid-y-inc world-height / grid-size-y
+  set max-distance 21
+
+  if min-distance > max-distance [
+    user-message (word "min-distance cannot exceed " max-distance ". Resetting to " max-distance ".")
+    set min-distance max-distance
+  ]
 
   ;; don't make acceleration 0.1 since we could get a rounding error and end up on a patch boundary
   set acceleration 0.099
 end
+
 
 ;; Make the patches have appropriate colors, set up the roads and intersections agentsets,
 ;; and initialize the traffic lights to one setting
@@ -428,6 +452,7 @@ to stop-watching
   ask turtles [
     set label ""
     stop-inspecting self
+    if size = 2 [set size 1]
   ]
   reset-perspective
 end
@@ -440,6 +465,10 @@ to label-subject
     ]
   ]
 end
+
+
+
+
 
 
 ; Copyright 2008 Uri Wilensky.
@@ -517,7 +546,7 @@ grid-size-y
 grid-size-y
 1
 9
-6.0
+3.0
 1
 1
 NIL
@@ -532,7 +561,7 @@ grid-size-x
 grid-size-x
 1
 9
-6.0
+3.0
 1
 1
 NIL
@@ -558,7 +587,7 @@ num-cars
 num-cars
 1
 400
-45.0
+76.0
 1
 1
 NIL
@@ -651,7 +680,7 @@ ticks-per-cycle
 ticks-per-cycle
 1
 100
-20.0
+4.0
 1
 1
 NIL
@@ -767,6 +796,21 @@ NIL
 NIL
 NIL
 1
+
+SLIDER
+795
+210
+967
+243
+min-distance
+min-distance
+0
+100
+4.0
+1
+1
+NIL
+HORIZONTAL
 
 @#$#@#$#@
 ## ACKNOWLEDGMENT
