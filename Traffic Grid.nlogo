@@ -11,8 +11,8 @@ globals
   ;; patch agentsets
   intersections ;; agentset containing the patches that are intersections
   roads         ;; agentset containing the patches that are roads
-  
-  dynamic-lights?          ;; NEW variable to make adjustments to lights?
+
+  dynamic-lights?          ;; NEW variable to make adjustments to lights
 ]
 
 turtles-own
@@ -35,7 +35,7 @@ patches-own
   auto?           ;; whether or not this intersection will switch automatically.
                   ;; false for non-intersection patches.
   waiting-cars    ;; NEW variable to track the number of waiting cars at the intersection
-
+  
 ]
 
 
@@ -175,7 +175,7 @@ to go
   update-current
 
   ;; have the intersections change their color
-  set-signals
+  set-signals-priority
   set num-cars-stopped 0
 
   ;; set the turtles speed for this time thru the procedure, move them forward their speed,
@@ -249,12 +249,13 @@ end
 
 ;; have the traffic lights change color if phase equals each intersections' my-phase
 to set-signals
-  ask intersections with [auto? and phase = floor ((my-phase * ticks-per-cycle) / 100)]
-  [
-    set green-light-up? (not green-light-up?)
-    set-signal-colors
-  ]
+ ask intersections with [auto? and phase = floor ((my-phase * ticks-per-cycle) / 100)]
+ [
+   set green-light-up? (not green-light-up?)
+   set-signal-colors
+ ]
 end
+
 
 ;; This procedure checks the variable green-light-up? at each intersection and sets the
 ;; traffic lights to have the green light up or the green light to the left.
@@ -280,14 +281,15 @@ end
 ;; set the turtles' speed based on whether they are at a red traffic light or the speed of the
 ;; turtle (if any) on the patch in front of them
 to set-car-speed  ;; turtle procedure
-  ifelse pcolor = red
-  [ set speed 0 ]
-  [
-    ifelse up-car?
-    [ set-speed 0 -1 ]
-    [ set-speed 1 0 ]
-  ]
+ ifelse pcolor = red
+ [ set speed 0 ]
+ [
+   ifelse up-car?
+   [ set-speed 0 -1 ]
+   [ set-speed 1 0 ]
+ ]
 end
+
 
 ;; set the speed variable of the car to an appropriate value (not exceeding the
 ;; speed limit) based on whether there are cars on the patch in front of the car
@@ -387,7 +389,7 @@ end
 to count-waiting-cars-at-intersection-1 [target-x target-y]
  let specific-patch patch target-x target-y  ;; input coordinates for the specific patch
  let waiting-cars-count 0
- let threshold-distance 10  ;; CHANGE depending on grid size (distance = proximity)
+ let threshold-distance 10
  ;; Loop through all cars
  ask turtles [
    ;; Check if the car is near the specific patch and is stopped
@@ -412,52 +414,79 @@ to update-waiting-cars
   ]
 end
 
-to set-signals-REF
- ask intersections with [auto? and phase = floor ((my-phase * ticks-per-cycle) / 100)]
- [
-   set green-light-up? (not green-light-up?)
-   set-signal-colors
- ]
-end
-
-;; WORKS!! YAY so essentially define distance to account for (arbitrarily 10) 
-;; adjust light timing based on waiting counts in vertical and horizontal direction
-to set-signals-1
+to set-signals-priority
   ask intersections with [auto? and phase = floor ((my-phase * ticks-per-cycle) / 100)] [
-    let threshold-distance 10  ;; Distance threshold to count cars as "waiting"
+    let x-distance world-width / grid-size-x  ;; Distance threshold to count cars as "waiting"
+    let y-distance world-width / grid-size-y  ;; Distance threshold to count cars as "waiting"
     let intersection-patch patch pxcor pycor  ;; The patch of this intersection
 
     ;; x-axis tracking (up-down)
     let waiting-cars-x count turtles with [
-      speed = 0 and distance intersection-patch <= threshold-distance and pxcor = [pxcor] of intersection-patch
+      speed = 0 and distance intersection-patch <= x-distance 
+      and pxcor = [pxcor] of intersection-patch
     ]
 
     ;; y-axis tracking (L->R)
     let waiting-cars-y count turtles with [
-      speed = 0 and distance intersection-patch <= threshold-distance and pycor = [pycor] of intersection-patch
+      speed = 0 and distance intersection-patch <= y-distance 
+      and pycor = [pycor] of intersection-patch
     ]
 
-    ;; Switch the light if one side exceeds set car number (arbitrarily 5_
-    if green-light-up? and waiting-cars-y >= 5 [
+    ;; Switch the light if one side exceeds set car number (waiting-limit = slider)
+    if waiting-cars-y >= waiting-limit [
+      if green-light-up? [
       set green-light-up? false  
       set-signal-colors
-    ] 
-    if not green-light-up? and waiting-cars-x >= 5 [
+      ]
+    ]
+    
+    if waiting-cars-x >= waiting-limit [
+      if not green-light-up? [
       set green-light-up? true 
       set-signal-colors
+      ]
     ]
   ]
 end
 
+to set-signals-balance
+  ask intersections with [auto? and phase = floor ((my-phase * ticks-per-cycle) / 100)] [
+    let x-distance world-width / grid-size-x  ;; Distance threshold to count cars as "waiting"
+    let y-distance world-width / grid-size-y  ;; Distance threshold to count cars as "waiting"
+    let intersection-patch patch pxcor pycor  ;; The patch of this intersection
 
+    ;; x-axis tracking (up-down)
+    let waiting-cars-x count turtles with [
+      speed = 0 and distance intersection-patch <= x-distance and pxcor = [pxcor] of intersection-patch
+    ]
 
+    ;; y-axis tracking (L->R)
+    let waiting-cars-y count turtles with [
+      speed = 0 and distance intersection-patch <= y-distance and pycor = [pycor] of intersection-patch
+    ]
+    
+     ;; Switch the light to balance waiting car number
+    if waiting-cars-y >= waiting-cars-x [
+      if green-light-up? [
+      set green-light-up? false  
+      set-signal-colors
+      ]
+    ]
+    
+    if waiting-cars-x >= waiting-cars-y [
+      if not green-light-up? [
+      set green-light-up? true 
+      set-signal-colors
+      ]
+    ]  ]
+end
 
 ;; Prints all cars at a specific intersection based on target's coorginates
 to-report count-waiting-cars-at-intersection [target-row target-column]
   ;; Find the specific patch based on the row and column
   let specific-patch patch (target-column * grid-x-inc) (target-row * grid-y-inc)
+  let  threshold-distance 10
   let waiting-cars-count 0
-  let threshold-distance 10  ;; Distance threshold 
 
   ;; Loop cars and checks distance to the intersection
   ask turtles [
@@ -470,14 +499,14 @@ to-report count-waiting-cars-at-intersection [target-row target-column]
   report waiting-cars-count
 end
 
-;; Helper: Prints all cars at intersections on a 2x2 grid NOT dynamic
+;; Helper: Prints all cars waiting at intersections on a 2x2 grid NOT dynamic
 to check-intersection-counts
   let waiting-at-1-1 count-waiting-cars-at-intersection 1 1
   let waiting-at--1-1 count-waiting-cars-at-intersection -1 1
   let waiting-at--1--18 count-waiting-cars-at-intersection -1 -18
   let waiting-at-18--18 count-waiting-cars-at-intersection 18 -18
-  
-  ;; Display 
+
+  ;; Display
   show (word "Waiting cars at intersection (1, 1): " waiting-at-1-1)
   show (word "Waiting cars at intersection (-1, 1): " waiting-at--1-1)
   show (word "Waiting cars at intersection (-1, -18): " waiting-at--1--18)
@@ -491,7 +520,7 @@ to show-intersection-list
  ]
 end
 
-;; Helper: Num for all cars stopped 
+;; Helper: Num for all cars stopped
 to count-stopped-cars-all
  let stopped-cars count turtles with [speed = 0]
  show stopped-cars
